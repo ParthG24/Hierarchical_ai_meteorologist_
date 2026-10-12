@@ -49,7 +49,18 @@ def meteorologist_prompt(ctx: ContextPayload) -> str:
         else "No separate current snapshot was provided; infer present conditions only from hourly/aggregates."
     )
 
-    return f"""You are an expert meteorologist. You receive ONLY the structured JSON data below. Do not invent weather that is not supported by these tables.
+    return f"""You are a professional meteorologist tasked with interpreting a time series of weather data for a specific location. Your goal is to write a clear, concise, and scientifically grounded summary of the weather conditions over the given period.
+
+You must:
+- Describe the evolution of key meteorological parameters such as temperature, wind, precipitation, humidity, and pressure over time.
+- Identify and explain significant weather phenomena, including heat waves, cold fronts, thunderstorms, or abrupt changes in conditions.
+- Highlight temporal trends, such as warming, cooling, increasing cloudiness, or shifting wind directions.
+- Provide interpretive insights, not just numerical repetitions — describe what the numbers imply about the atmosphere.
+- If provided, use climatological normals or geographic context to comment on anomalies (e.g., "unusually cold for this region").
+- Avoid simply listing values or copying table entries. Instead, synthesize the data into meaningful meteorological observations.
+- Use CLIMATOLOGY INFO from input data for describing anomaly events.
+- Use formal meteorological language but remain understandable to non-specialists.
+- Use aggregates over single-hour spikes. Do not invent weather that is not supported by the supplied data.
 
 DATA (JSON):
 {json.dumps(payload, separators=(',', ':'), default=str)}
@@ -58,18 +69,14 @@ CONTEXT MODE: {mode_note}. {hourly_note}
 REAL-TIME: {rt_note}
 {clim_note}
 
-IMPORTANT: Keep your TOTAL response under 3000 tokens. Be concise.
-
-Output a single JSON object with exactly these keys:
-- "summary": string, 1-2 short paragraphs MAX. Describe key weather dynamics concisely with causal reasoning. Reference aggregate data. Keep it internally consistent.
-- "proof": string, compact bullet list of key data signals (numbers, trends). Max 6-8 bullets.
+IMPORTANT: Keep your TOTAL response under 3000 tokens. Output a single JSON object with exactly these keys:
+- "summary": string — 1-2 coherent paragraphs (typically 4–6 sentences) covering the full time period, synthesizing the parameters and trends following the guidelines above.
+- "proof": string — compact bullet list of key data signals (numbers, trends) supporting your interpretation. Max 6-8 bullets.
 - "keywords": array of 3-5 short meteorological terms (e.g. "cooling trend", "heavy rain").
 - "warnings": optional string ONLY if hazardous conditions exist. Omit key if none.
 - "claims": array of MAX 8 claim objects. Only the most important directional/threshold statements. Each: {{"claim_id":"CLAIM_001","variable":"...","assertion_type":"...","window_start_utc":"...","window_end_utc":"...","threshold_or_delta":"> 25.0","data_scale":"hourly|six_hour|daily|climatology|current"}}. threshold_or_delta MUST be a single numeric value with operator; never a range. "variable" MUST be one of these exact column names depending on data_scale — hourly/current: t_c, td_c, rh_percent, wind_speed_ms, wind_gust_ms, precipitation_mm, visibility_m, pressure_hpa | daily/six_hour: t_mean_c, t_max_c, t_min_c, td_mean_c, rh_mean_percent, wind_speed_mean_ms, precipitation_sum_mm, visibility_mean_m, pressure_mean_hpa. Do NOT invent variable names; use only the names listed here.
 - "causal_chain": array of 4-8 strings ONLY from: pressure_drop, pressure_rise, stable_pressure, wind_increase, light_winds, wind_gusts, high_humidity, dry_air, rainfall, no_rain, warming, cooling, extreme_heat, low_visibility, fog_persistence, thunderstorm.
 - "reasoning_flags": array of strings (uncertainties/anomalies, or empty list).
-
-Rules: Use aggregates over single-hour spikes. Don't fabricate missing variables. Be concise.
 
 Respond with JSON only, no markdown fences.
 """

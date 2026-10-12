@@ -1,8 +1,28 @@
 from __future__ import annotations
 
+from enum import Enum
 from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
+
+
+class CausalState(str, Enum):
+    PRESSURE_DROP = "pressure_drop"
+    PRESSURE_RISE = "pressure_rise"
+    STABLE_PRESSURE = "stable_pressure"
+    WIND_INCREASE = "wind_increase"
+    LIGHT_WINDS = "light_winds"
+    WIND_GUSTS = "wind_gusts"
+    HIGH_HUMIDITY = "high_humidity"
+    DRY_AIR = "dry_air"
+    RAINFALL = "rainfall"
+    NO_RAIN = "no_rain"
+    WARMING = "warming"
+    COOLING = "cooling"
+    EXTREME_HEAT = "extreme_heat"
+    LOW_VISIBILITY = "low_visibility"
+    FOG_PERSISTENCE = "fog_persistence"
+    THUNDERSTORM = "thunderstorm"
 
 
 # --- Location & climatology ---
@@ -148,6 +168,19 @@ class MeteorologistOutput(BaseModel):
         """LLMs occasionally return >5 keywords; silently truncate to 5."""
         if isinstance(v, list) and len(v) > 5:
             return v[:5]
+        return v
+
+    @field_validator("causal_chain", mode="before")
+    @classmethod
+    def sanitize_causal_chain(cls, v: list[Any]) -> list[str]:
+        """Sanitizes causal chain items to clean lowercase strings."""
+        if isinstance(v, list):
+            cleaned = []
+            for item in v:
+                s = str(item).lower().strip().replace(" ", "_")
+                if s:
+                    cleaned.append(s)
+            return cleaned
         return v
 
 

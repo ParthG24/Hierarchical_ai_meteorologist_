@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any, Optional
 
@@ -135,18 +136,19 @@ async def resolve_location(
     client: httpx.AsyncClient,
 ) -> LocationMeta:
     if lat is not None and lon is not None:
-        el = await fetch_geonames_elevation(lat, lon, client)
+        el_task = fetch_geonames_elevation(lat, lon, client)
+        rev_task = _reverse_geocode(lat, lon, client)
+        el, rev = await asyncio.gather(el_task, rev_task, return_exceptions=True)
+        el = el if isinstance(el, (int, float)) else None
+        
         city = query or f"{lat:.4f},{lon:.4f}"
         admin = ""
         country = ""
-        try:
-            rev = await _reverse_geocode(lat, lon, client)
-            if rev:
-                city = rev.get("name") or city
-                admin = rev.get("adminName1") or ""
-                country = rev.get("countryName") or ""
-        except Exception:
-            pass
+        if isinstance(rev, dict) and rev:
+            city = rev.get("name") or city
+            admin = rev.get("adminName1") or ""
+            country = rev.get("countryName") or ""
+
         return LocationMeta(
             city=city,
             administrative_region=admin,
@@ -170,16 +172,20 @@ async def resolve_location(
     g = geonames[0]
     lat_f = float(g["lat"])
     lon_f = float(g["lng"])
-    el = g.get("srtm3") or g.get("astergdem")
-    if el is None:
-        el = await fetch_geonames_elevation(lat_f, lon_f, client)
-    elif el is not None:
-        el = float(el)
-
     city = g.get("name") or query
     admin = g.get("adminName1") or ""
     country = g.get("countryName") or ""
-    wiki = await fetch_wikipedia_summary(city, client)
+
+    el_direct = g.get("srtm3") or g.get("astergdem")
+    if el_direct is None:
+        el_task = fetch_geonames_elevation(lat_f, lon_f, client)
+        wiki_task = fetch_wikipedia_summary(city, client)
+        el, wiki = await asyncio.gather(el_task, wiki_task, return_exceptions=True)
+        el = el if isinstance(el, (int, float)) else None
+        wiki = wiki if isinstance(wiki, str) else None
+    else:
+        el = float(el_direct)
+        wiki = await fetch_wikipedia_summary(city, client)
 
     return LocationMeta(
         city=city,

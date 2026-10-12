@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -71,12 +72,16 @@ def trim_payload_for_mode(
 async def run_assistant_pipeline(req: AssistantRequest, client: httpx.AsyncClient) -> tuple[ContextPayload, dict[str, Any]]:
     ensure_cache_dir()
     loc = await resolve_location(query=req.query, lat=req.latitude, lon=req.longitude, client=client)
-    loc, afd_text, nws_codes = await maybe_attach_afd(loc, client)
 
-    clim, clim_codes = await fetch_climatology(
-        loc.latitude, loc.longitude, client, elevation_m=loc.elevation_m
+    # Concurrently harvest NWS AFD, climatology normals, and NWP forecast
+    afd_task = maybe_attach_afd(loc, client)
+    clim_task = fetch_climatology(loc.latitude, loc.longitude, client, elevation_m=loc.elevation_m)
+    forecast_task = fetch_forecast(loc.latitude, loc.longitude, client)
+
+    (loc_enriched, afd_text, nws_codes), (clim, clim_codes), (current, hourly, daily_om, om_codes) = await asyncio.gather(
+        afd_task, clim_task, forecast_task
     )
-    current, hourly, daily_om, om_codes = await fetch_forecast(loc.latitude, loc.longitude, client)
+    loc = loc_enriched
 
     six = aggregate_six_hour(hourly)
     daily_h = aggregate_daily_from_hourly(hourly)

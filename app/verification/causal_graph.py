@@ -3,6 +3,10 @@ import yaml
 import networkx as nx
 from typing import List, Tuple, Dict, Any
 
+from app.schemas import CausalState
+
+VALID_CAUSAL_NODES = {cs.value for cs in CausalState}
+
 class CausalGraph:
     def __init__(self, rules_path: str):
         self.rules_path = rules_path
@@ -35,7 +39,11 @@ class CausalGraph:
         """Helper to convert user/LLM-written events to normalized graph nodes using keywords."""
         s = str(node).lower().strip().replace(" ", "_")
         
-        # Exact synonym lookup first
+        # O(1) fast-path for canonical CausalState nodes
+        if s in VALID_CAUSAL_NODES:
+            return s
+            
+        # Exact synonym lookup
         if s in self.node_synonyms:
             return self.node_synonyms[s]
             
